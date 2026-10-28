@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sigma Prime • Gestão Anderson Iseppi (PF & Barbearia)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{color-scheme:dark}body{font-family:Inter,system-ui,sans-serif;background:#09090b;color:#f4f4f5}
+.card{background:rgba(24,24,27,.92);border:1px solid rgba(255,255,255,.09);border-radius:16px}
+.btn{border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.1);transition:.15s;cursor:pointer}
+.btn:hover{filter:brightness(1.15)}.field{width:100%;background:#09090b;border:1px solid #3f3f46;border-radius:8px;padding:9px;color:#fafafa;font-size:12px}
+.tab{padding:12px 10px;white-space:nowrap;font-size:12px;border-bottom:2px solid transparent;color:#a1a1aa;cursor:pointer}
+.tab.active{border-color:#34d399;color:#6ee7b7;font-weight:800}
+th,td{padding:10px 12px;border-bottom:1px solid #27272a;text-align:left;font-size:12px;vertical-align:top}
+th{color:#a1a1aa;font-weight:700;background:#18181b} .muted{color:#a1a1aa}
+.modal{position:fixed;inset:0;background:#000b;z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+.modalbox{width:min(620px,100%);max-height:90vh;overflow:auto;background:#18181b;border:1px solid #3f3f46;border-radius:18px;padding:20px}
+.hidden{display:none!important} .pill{padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800}
+input[type=file]{font-size:12px;max-width:100%}
+</style>
+</head>
+<body class="min-h-screen">
+<header class="sticky top-0 z-40 bg-zinc-950/95 border-b border-white/10 px-4">
+ <div class="max-w-7xl mx-auto py-3 flex flex-wrap items-center justify-between gap-3">
+  <div>
+    <div class="flex items-center gap-2">
+      <span class="text-amber-400 text-xl">✂</span>
+      <h1 class="font-black tracking-tight">SIGMA PRIME <span class="text-amber-400">BARBER & PESSOAL</span></h1>
+      <span class="pill bg-amber-500/15 text-amber-300">PF & PJ</span>
+    </div>
+    <p class="text-[10px] uppercase tracking-widest text-zinc-500">Gestão Financeira Integrada • Anderson Iseppi</p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+   <button class="btn bg-blue-600 text-white" onclick="exportarJSON()">Backup JSON</button>
+   <button class="btn bg-emerald-600 text-white" onclick="abrirTransacao()">+ Lançamento</button>
+  </div>
+ </div>
+ <nav class="max-w-7xl mx-auto flex gap-2 overflow-x-auto">
+  <a class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Painel Geral</a>
+  <a class="tab" data-tab="contas" onclick="switchTab('contas')">Contas a Pagar / Receber</a>
+  <a class="tab" data-tab="movimentos" onclick="switchTab('movimentos')">Movimentações</a>
+  <a class="tab" data-tab="importar" onclick="switchTab('importar')">Importar / Exportar</a>
+  <a class="tab" data-tab="metas" onclick="switchTab('metas')">Metas & Reservas</a>
+ </nav>
+</header>
+<main class="max-w-7xl mx-auto p-4 space-y-5">
+ <div id="status" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 p-3 text-xs" role="status"></div>
+ 
+ <section id="tab-dashboard" class="tabpage space-y-5">
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+   <div class="card p-4">
+     <p class="text-xs muted">Barbearia PJ (Banco + Gaveta)</p>
+     <div id="kBarbearia" class="text-2xl font-black text-amber-300 mt-2">R$ 0,00</div>
+     <p id="dBarbearia" class="text-[11px] muted mt-2"></p>
+   </div>
+   <div class="card p-4">
+     <p class="text-xs muted">Anderson Pessoal (PF)</p>
+     <div id="kPessoal" class="text-2xl font-black text-emerald-300 mt-2">R$ 0,00</div>
+     <p id="dPessoal" class="text-[11px] muted mt-2"></p>
+   </div>
+   <div class="card p-4">
+     <p class="text-xs muted">Reserva Total (PF + Barbearia)</p>
+     <div id="kReserva" class="text-2xl font-black mt-2">R$ 0,00</div>
+     <div class="h-2 bg-zinc-800 rounded-full mt-3 overflow-hidden"><div id="barReserva" class="h-full bg-emerald-400" style="width:0"></div></div>
+     <p id="dReserva" class="text-[11px] muted mt-2"></p>
+   </div>
+   <div class="card p-4">
+     <p class="text-xs muted">Teto Gastos Pessoais / Mercado</p>
+     <div id="kMercado" class="text-2xl font-black mt-2">R$ 0,00</div>
+     <div class="h-2 bg-zinc-800 rounded-full mt-3 overflow-hidden"><div id="barMercado" class="h-full bg-amber-400" style="width:0"></div></div>
+     <p id="dMercado" class="text-[11px] muted mt-2"></p>
+   </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   <div class="card p-5 lg:col-span-2">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="font-bold">Resumo Tático & Diagnóstico</h2>
+      <button class="btn bg-zinc-800" onclick="openModal('modal-saldos')">Ajustar Saldos Iniciais</button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+     <div class="bg-zinc-900 rounded-xl p-3"><p class="text-xs muted">A pagar pendente (Geral)</p><p id="kPagar" class="text-xl font-black text-rose-300 mt-1">R$ 0,00</p></div>
+     <div class="bg-zinc-900 rounded-xl p-3"><p class="text-xs muted">Previsão entradas (Receber)</p><p id="kReceber" class="text-xl font-black text-cyan-300 mt-1">R$ 0,00</p></div>
+     <div class="bg-zinc-900 rounded-xl p-3"><p class="text-xs muted">Projetado Caixa Operacional</p><p id="kProjetado" class="text-xl font-black mt-1">R$ 0,00</p></div>
+    </div>
+    <p id="diagnostico" class="text-sm mt-4 leading-relaxed"></p>
+   </div>
+   <div class="card p-5"><h2 class="font-bold mb-3">Distribuição de Despesas</h2><div style="height:250px"><canvas id="chartCategorias"></canvas></div></div>
+  </div>
+  <div class="card p-4"><div class="flex justify-between gap-3 flex-wrap"><h2 class="font-bold">Próximos Vencimentos e Recebimentos</h2><button class="btn bg-zinc-800" onclick="switchTab('contas')">Ver todas</button></div><div id="proximas" class="mt-3 overflow-x-auto"></div></div>
+ </section>
+
+ <section id="tab-contas" class="tabpage hidden space-y-4">
+  <div class="flex flex-wrap justify-between items-center gap-2">
+    <h2 class="text-lg font-bold">Contas a Pagar & Receber</h2>
+    <div class="flex gap-2">
+      <button class="btn bg-rose-600" onclick="novaConta('pagar')">+ A pagar</button>
+      <button class="btn bg-emerald-600" onclick="novaConta('receber')">+ A receber</button>
+    </div>
+  </div>
+  <div class="card p-3">
+    <div class="flex flex-wrap gap-2">
+      <input id="filtroConta" class="field max-w-xs" placeholder="Pesquisar descrição..." oninput="renderContas()">
+      <select id="filtroStatus" class="field max-w-xs" onchange="renderContas()">
+        <option value="">Todos os status</option>
+        <option value="pendente">Pendente</option>
+        <option value="pago">Pago</option>
+        <option value="recebido">Recebido</option>
+      </select>
+    </div>
+    <div id="listaContas" class="overflow-x-auto mt-3"></div>
+  </div>
+ </section>
+
+ <section id="tab-movimentos" class="tabpage hidden space-y-4">
+  <div class="flex flex-wrap justify-between items-center gap-2">
+    <h2 class="text-lg font-bold">Movimentações de Caixa</h2>
+    <button class="btn bg-emerald-600" onclick="abrirTransacao()">+ Lançamento</button>
+  </div>
+  <div class="card p-3">
+    <div class="flex flex-wrap gap-2">
+      <input id="filtroMov" class="field max-w-xs" placeholder="Pesquisar movimentação..." oninput="renderMovimentos()">
+      <input id="filtroMes" class="field max-w-[180px]" type="month" onchange="renderMovimentos()">
+      <button class="btn bg-zinc-800" onclick="document.getElementById('filtroMes').value='';renderMovimentos()">Limpar período</button>
+    </div>
+    <div id="listaMov" class="overflow-x-auto mt-3"></div>
+  </div>
+ </section>
+
+ <section id="tab-importar" class="tabpage hidden space-y-4">
+  <h2 class="text-lg font-bold">Importar e Exportar Dados (.JSON, CSV)</h2>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   <div class="card p-5 space-y-3">
+    <h3 class="font-bold">Importar Arquivo (.JSON)</h3>
+    <input id="fileImport" type="file" accept=".json" class="field">
+    <button class="btn bg-blue-600 w-full" onclick="importarArquivo()">Restaurar arquivo JSON</button>
+   </div>
+   <div class="card p-5 space-y-3">
+    <h3 class="font-bold">Exportar e Salvar Backups</h3>
+    <button class="btn bg-emerald-600 w-full" onclick="exportarJSON()">Baixar backup completo (.json)</button>
+    <button class="btn bg-blue-600 w-full" onclick="exportarCSV()">Baixar movimentações (.csv)</button>
+   </div>
+  </div>
+ </section>
+
+ <section id="tab-metas" class="tabpage hidden space-y-4">
+  <h2 class="text-lg font-bold">Metas & Planejamento Financeiro</h2>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+   <div class="card p-5 space-y-3">
+     <h3 class="font-bold text-emerald-300">Reserva de Emergência Geral</h3>
+     <label class="text-xs">Meta Combinada (R$)<input id="metaReserva" class="field mt-1" type="number" min="0" step=".01"></label>
+     <button class="btn bg-emerald-600" onclick="salvarMetaReserva()">Salvar meta</button>
+   </div>
+   <div class="card p-5 space-y-3">
+     <h3 class="font-bold text-amber-300">Fundo para Equipamentos / Barbearia</h3>
+     <label class="text-xs">Saldo reservado (R$)<input id="fundoCarro" class="field mt-1" type="number" min="0" step=".01"></label>
+     <label class="text-xs">Meta para investimento / reformas (R$)<input id="metaCarro" class="field mt-1" type="number" min="0" step=".01"></label>
+     <button class="btn bg-amber-600 text-white" onclick="salvarMetaCarro()">Salvar fundo equipamentos</button>
+     <p id="resumoCarro" class="text-sm muted"></p>
+   </div>
+  </div>
+ </section>
+</main>
+
+<div id="modal-conta" class="modal hidden">
+ <div class="modalbox space-y-3">
+  <div class="flex justify-between items-center"><h3 id="tituloConta" class="font-bold">Nova conta</h3><button class="btn bg-zinc-800" onclick="closeModal('modal-conta')">Fechar</button></div>
+  <input id="cId" type="hidden">
+  <label class="text-xs block">Tipo<select id="cTipo" class="field mt-1"><option value="pagar">A pagar</option><option value="receber">A receber</option></select></label>
+  <label class="text-xs block">Descrição<input id="cNome" class="field mt-1" placeholder="Ex: Aluguel Barbearia, Compra Lâminas, etc" required></label>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   <label class="text-xs">Valor (R$)<input id="cValor" class="field mt-1" type="number" min=".01" step=".01"></label>
+   <label class="text-xs">Vencimento<input id="cVenc" class="field mt-1" type="date"></label>
+   <label class="text-xs">Titular / Esfera
+    <select id="cResp" class="field mt-1">
+      <option value="Barbearia">Barbearia (PJ)</option>
+      <option value="Anderson">Anderson (PF)</option>
+    </select>
+   </label>
+   <label class="text-xs">Status
+    <select id="cStatus" class="field mt-1">
+      <option value="pendente">Pendente</option>
+      <option value="pago">Pago</option>
+      <option value="recebido">Recebido</option>
+    </select>
+   </label>
+  </div>
+  <label class="text-xs block">Observação<input id="cObs" class="field mt-1"></label>
+  <button class="btn bg-emerald-600 w-full" onclick="salvarConta()">Salvar conta</button>
+ </div>
+</div>
+
+<div id="modal-transacao" class="modal hidden">
+ <div class="modalbox space-y-3">
+  <div class="flex justify-between items-center"><h3 id="tituloTrans" class="font-bold">Novo lançamento</h3><button class="btn bg-zinc-800" onclick="closeModal('modal-transacao')">Fechar</button></div>
+  <input id="tId" type="hidden">
+  <label class="text-xs block">Descrição<input id="tDesc" class="field mt-1" placeholder="Ex: Corte Degrade + Barba, Reposição Pomadas"></label>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   <label class="text-xs">Valor (R$)<input id="tValor" class="field mt-1" type="number" min=".01" step=".01"></label>
+   <label class="text-xs">Data<input id="tData" class="field mt-1" type="date"></label>
+   <label class="text-xs">Tipo
+    <select id="tTipo" class="field mt-1">
+      <option value="receita">Receita (Entrada)</option>
+      <option value="despesa">Despesa (Saída)</option>
+      <option value="transferencia">Transferência</option>
+    </select>
+   </label>
+   <label class="text-xs">Titular / Esfera
+    <select id="tResp" class="field mt-1">
+      <option value="Barbearia">Barbearia (PJ)</option>
+      <option value="Anderson">Anderson (PF)</option>
+    </select>
+   </label>
+   <label class="text-xs">Categoria<select id="tCat" class="field mt-1"></select></label>
+   <label class="text-xs">Conta / Origem
+    <select id="tConta" class="field mt-1">
+      <option value="Barbearia Caixa Físico">Barbearia Caixa Físico (Gaveta)</option>
+      <option value="Barbearia Conta PJ">Barbearia Conta PJ (Pix/Cartão)</option>
+      <option value="Anderson Pessoal">Anderson Pessoal (PF)</option>
+      <option value="Anderson Cartão">Anderson Cartão</option>
+      <option value="Reserva Barbearia">Reserva Barbearia</option>
+      <option value="Reserva Anderson">Reserva Anderson</option>
+      <option value="Fundo Equipamentos">Fundo Equipamentos</option>
+    </select>
+   </label>
+  </div>
+  <label class="text-xs block">Observação<input id="tObs" class="field mt-1"></label>
+  <button class="btn bg-emerald-600 w-full" onclick="salvarTransacao()">Salvar lançamento</button>
+ </div>
+</div>
+
+<div id="modal-saldos" class="modal hidden">
+ <div class="modalbox space-y-3">
+  <div class="flex justify-between items-center"><h3 class="font-bold">Ajustar Posição de Caixa</h3><button class="btn bg-zinc-800" onclick="closeModal('modal-saldos')">Fechar</button></div>
+  <div id="camposSaldos" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+  <button class="btn bg-emerald-600 w-full" onclick="salvarSaldos()">Atualizar saldos</button>
+ </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'sigma_prime_anderson_db';
+const todayISO = () => new Date().toLocaleDateString('en-CA');
+
+const defaultDB = {
+  versao: 2,
+  saldos: {
+    barbeariaConta: 0.0,
+    barbeariaCaixa: 0.0,
+    andersonPessoal: 0.0,
+    andersonCartao: 0.0,
+    reservaBarbearia: 0.0,
+    reservaAnderson: 0.0,
+    tetoMercado: 1200.0,
+    metaReserva: 10000.0,
+    fundoCarro: 0.0,
+    metaCarro: 5000.0,
+    mercadoBase: 0.0,
+    mercadoBaseMes: todayISO().slice(0, 7)
+  },
+  categorias: [
+    { nome: '💈 Barbearia - Serviços', cor: '#10b981', mercado: false },
+    { nome: '🧴 Barbearia - Venda Produtos', cor: '#06b6d4', mercado: false },
+    { nome: '✂️ Barbearia - Insumos e Lâminas', cor: '#f59e0b', mercado: false },
+    { nome: '🏢 Barbearia - Custos e Aluguel', cor: '#ef4444', mercado: false },
+    { nome: '🛒 Supermercado & Casa', cor: '#3b82f6', mercado: true },
+    { nome: '🍔 Alimentação / Lazer Pessoal', cor: '#f97316', mercado: false },
+    { nome: '⛽ Combustível & Transporte', cor: '#64748b', mercado: false },
+    { nome: '🏠 Contas Pessoais', cor: '#8b5cf6', mercado: false },
+    { nome: '💰 Pró-labore / Retiradas', cor: '#22c55e', mercado: false },
+    { nome: '📦 Outros / Diversos', cor: '#a1a1aa', mercado: false }
+  ],
+  contas: [],
+  transacoes: []
+};
+
+let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || clone(defaultDB);
+let chart = null;
+
+function clone(x){ return JSON.parse(JSON.stringify(x)); }
+function migrate(x){
+  x.versao = 2;
+  x.saldos = { ...clone(defaultDB.saldos), ...(x.saldos || {}) };
+  x.categorias = Array.isArray(x.categorias) && x.categorias.length ? x.categorias : clone(defaultDB.categorias);
+  x.contas = Array.isArray(x.contas) ? x.contas : [];
+  x.transacoes = Array.isArray(x.transacoes) ? x.transacoes : [];
+  return x;
+}
+
+function fmt(v){ return Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function num(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
+function monthNow(){ return todayISO().slice(0, 7); }
+
+function status(msg, bad=false){
+  const el = document.getElementById('status');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden', 'border-emerald-500/30', 'bg-emerald-500/10', 'text-emerald-200', 'border-rose-500/30', 'bg-rose-500/10', 'text-rose-200');
+  el.classList.add(...(bad ? ['border-rose-500/30', 'bg-rose-500/10', 'text-rose-200'] : ['border-emerald-500/30', 'bg-emerald-500/10', 'text-emerald-200']));
+  setTimeout(() => el.classList.add('hidden'), 6000);
+}
+
+function saveDB(){
+  db = migrate(db);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+  renderAll();
+}
+
+function switchTab(tab){
+  document.querySelectorAll('.tabpage').forEach(x => x.classList.add('hidden'));
+  document.getElementById('tab-' + tab).classList.remove('hidden');
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+  if(tab === 'contas') renderContas();
+  if(tab === 'movimentos') renderMovimentos();
+}
+
+function openModal(id){ document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
+
+function novaConta(tipo){
+  document.getElementById('cId').value = '';
+  document.getElementById('tituloConta').textContent = tipo === 'pagar' ? 'Nova conta a pagar' : 'Nova conta a receber';
+  document.getElementById('cTipo').value = tipo;
+  document.getElementById('cNome').value = '';
+  document.getElementById('cValor').value = '';
+  document.getElementById('cVenc').value = todayISO();
+  document.getElementById('cResp').value = 'Barbearia';
+  document.getElementById('cStatus').value = 'pendente';
+  document.getElementById('cObs').value = '';
+  openModal('modal-conta');
+}
+
+function editarConta(id){
+  const c = db.contas.find(x => String(x.id) === String(id));
+  if(!c) return;
+  document.getElementById('cId').value = c.id;
+  document.getElementById('tituloConta').textContent = 'Editar conta';
+  document.getElementById('cTipo').value = c.tipo;
+  document.getElementById('cNome').value = c.nome || '';
+  document.getElementById('cValor').value = num(c.valor);
+  document.getElementById('cVenc').value = c.venc || '';
+  document.getElementById('cResp').value = c.resp || 'Barbearia';
+  document.getElementById('cStatus').value = c.status || 'pendente';
+  document.getElementById('cObs').value = c.obs || '';
+  openModal('modal-conta');
+}
+
+function salvarConta(){
+  const id = document.getElementById('cId').value;
+  const nome = document.getElementById('cNome').value.trim();
+  const valor = num(document.getElementById('cValor').value);
+  if(!nome || valor < 0){ status('Informe uma descrição válida e o valor.', true); return; }
+  const c = {
+    id: id ? Number(id) : Date.now(),
+    tipo: document.getElementById('cTipo').value,
+    nome,
+    valor,
+    venc: document.getElementById('cVenc').value,
+    resp: document.getElementById('cResp').value,
+    status: document.getElementById('cStatus').value,
+    obs: document.getElementById('cObs').value.trim()
+  };
+  if(id) db.contas = db.contas.map(x => String(x.id) === String(id) ? c : x);
+  else db.contas.push(c);
+  closeModal('modal-conta');
+  saveDB();
+  status('Conta registrada.');
+}
+
+function excluirConta(id){
+  if(!confirm('Excluir este agendamento?')) return;
+  db.contas = db.contas.filter(x => String(x.id) !== String(id));
+  saveDB();
+}
+
+function toggleConta(id){
+  const c = db.contas.find(x => String(x.id) === String(id));
+  if(!c) return;
+  if(c.status === 'pendente'){
+    c.status = c.tipo === 'pagar' ? 'pago' : 'recebido';
+  } else {
+    c.status = 'pendente';
+  }
+  saveDB();
+}
+
+function importarArquivo(){
+  const file = document.getElementById('fileImport').files[0];
+  if(!file){ status('Selecione um arquivo .json.', true); return; }
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = JSON.parse(e.target.result);
+      if(data && (data.saldos || data.versao)){
+        db = migrate(data);
+        saveDB();
+        status('✅ Dados e configurações importados com sucesso!');
+      } else {
+        status('Estrutura de arquivo JSON incompatível.', true);
+      }
+    }catch(err){
+      status('Erro ao ler JSON: ' + err.message, true);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderContas(){
+  const q = (document.getElementById('filtroConta')?.value || '').toLowerCase();
+  const s = document.getElementById('filtroStatus')?.value || '';
+  const arr = db.contas.filter(c => (!q || String(c.nome).toLowerCase().includes(q)) && (!s || c.status === s));
+  const body = arr.map(c => {
+    let btnStyle = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+    let label = '⏳ Pendente';
+    let tipoLabel = c.tipo === 'pagar' ? 'A pagar' : 'A receber';
+    let tipoStyle = c.tipo === 'pagar' ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300';
+
+    if(c.status === 'pago'){
+      btnStyle = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+      label = '✅ Pago';
+      tipoLabel = 'Pago';
+    } else if(c.status === 'recebido'){
+      btnStyle = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+      label = '🟢 Recebido';
+      tipoLabel = 'Recebido';
+    }
+
+    return `<tr>
+      <td><span class="pill ${tipoStyle}">${tipoLabel}</span></td>
+      <td><b>${esc(c.nome)}</b><div class="muted mt-1">${esc(c.resp || '')} ${c.obs ? '• ' + esc(c.obs) : ''}</div></td>
+      <td>${esc(c.venc || 'Sem data')}</td>
+      <td class="font-bold">${fmt(c.valor)}</td>
+      <td><button class="px-2.5 py-1 rounded-full text-[10px] font-bold border ${btnStyle} transition" onclick="toggleConta('${c.id}')">${label}</button></td>
+      <td>
+        <button class="btn bg-zinc-800" onclick="editarConta('${c.id}')">Editar</button>
+        <button class="btn bg-rose-600/20 text-rose-200" onclick="excluirConta('${c.id}')">Excluir</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('listaContas').innerHTML = `<table class="w-full"><thead><tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody>${body || '<tr><td colspan="6" class="muted">Nenhuma conta cadastrada.</td></tr>'}</tbody></table>`;
+}
+
+function abrirTransacao(id=null){
+  const t = id ? db.transacoes.find(x => String(x.id) === String(id)) : null;
+  document.getElementById('tId').value = t ? t.id : '';
+  document.getElementById('tituloTrans').textContent = t ? 'Editar lançamento' : 'Novo lançamento';
+  document.getElementById('tDesc').value = t?.desc || '';
+  document.getElementById('tValor').value = t ? num(t.valor) : '';
+  document.getElementById('tData').value = t?.data || todayISO();
+  document.getElementById('tTipo').value = t?.tipo || 'receita';
+  document.getElementById('tResp').value = t?.resp || 'Barbearia';
+  document.getElementById('tCat').value = t?.cat || db.categorias[0]?.nome || '';
+  document.getElementById('tConta').value = t?.conta || 'Barbearia Caixa Físico';
+  document.getElementById('tObs').value = t?.obs || '';
+  openModal('modal-transacao');
+}
+
+function salvarTransacao(){
+  const id = document.getElementById('tId').value;
+  const desc = document.getElementById('tDesc').value.trim();
+  const valor = num(document.getElementById('tValor').value);
+  const data = document.getElementById('tData').value;
+  if(!desc || valor <= 0 || !data){
+    status('Informe descrição, valor e data válida.', true);
+    return;
+  }
+  const t = {
+    id: id ? Number(id) : Date.now(),
+    desc,
+    valor,
+    data,
+    tipo: document.getElementById('tTipo').value,
+    resp: document.getElementById('tResp').value,
+    cat: document.getElementById('tCat').value,
+    conta: document.getElementById('tConta').value,
+    obs: document.getElementById('tObs').value.trim()
+  };
+  if(id) db.transacoes = db.transacoes.map(x => String(x.id) === String(id) ? t : x);
+  else db.transacoes.push(t);
+  closeModal('modal-transacao');
+  saveDB();
+  status('Lançamento salvo.');
+}
+
+function excluirTransacao(id){
+  if(!confirm('Deseja excluir este lançamento?')) return;
+  db.transacoes = db.transacoes.filter(x => String(x.id) !== String(id));
+  saveDB();
+}
+
+function renderMovimentos(){
+  const q = (document.getElementById('filtroMov')?.value || '').toLowerCase();
+  const m = document.getElementById('filtroMes')?.value || '';
+  const arr = db.transacoes.filter(t => (!q || [t.desc, t.cat, t.conta, t.resp].join(' ').toLowerCase().includes(q)) && (!m || String(t.data).startsWith(m))).slice().sort((a,b) => String(b.data).localeCompare(String(a.data)));
+  const rows = arr.map(t => `<tr>
+    <td>${esc(t.data)}</td>
+    <td><b>${esc(t.desc)}</b><div class="muted">${esc(t.resp || '')} • ${esc(t.conta || '')}</div></td>
+    <td>${esc(t.cat || '')}</td>
+    <td><span class="pill ${t.tipo === 'receita' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}">${esc(t.tipo || 'despesa')}</span></td>
+    <td class="font-bold">${fmt(t.valor)}</td>
+    <td>
+      <button class="btn bg-zinc-800" onclick="abrirTransacao('${t.id}')">Editar</button>
+      <button class="btn bg-rose-600/20 text-rose-200" onclick="excluirTransacao('${t.id}')">Excluir</button>
+    </td>
+  </tr>`).join('');
+  document.getElementById('listaMov').innerHTML = `<table class="w-full"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="muted">Nenhuma movimentação registrada.</td></tr>'}</tbody></table>`;
+}
+
+function setupSaldos(){
+  const campos = [
+    ['barbeariaConta', 'Barbearia Conta PJ (Pix/Banco)'],
+    ['barbeariaCaixa', 'Barbearia Caixa Físico (Gaveta)'],
+    ['andersonPessoal', 'Anderson Conta Pessoal (PF)'],
+    ['andersonCartao', 'Anderson Cartão de Crédito'],
+    ['reservaBarbearia', 'Reserva Barbearia'],
+    ['reservaAnderson', 'Reserva Pessoal Anderson'],
+    ['tetoMercado', 'Teto Despesas Fixas / Mercado'],
+    ['mercadoBase', 'Base Mercado Atual']
+  ];
+  document.getElementById('camposSaldos').innerHTML = campos.map(([k, l]) =>
+    `<label class="text-xs">${l}<input class="field mt-1" data-saldo="${k}" type="number" step=".01" value="${num(db.saldos[k])}"></label>`
+  ).join('');
+}
+
+function salvarSaldos(){
+  document.querySelectorAll('[data-saldo]').forEach(el => db.saldos[el.dataset.saldo] = num(el.value));
+  closeModal('modal-saldos');
+  saveDB();
+  status('Posições de saldos atualizadas.');
+}
+
+function renderDashboard(){
+  const s = db.saldos;
+  const gBarber = num(s.barbeariaConta) + num(s.barbeariaCaixa);
+  const gPess = num(s.andersonPessoal);
+  const res = num(s.reservaBarbearia) + num(s.reservaAnderson);
+  const meta = Math.max(1, num(s.metaReserva) || 10000);
+  const mes = monthNow();
+
+  document.getElementById('kBarbearia').textContent = fmt(gBarber);
+  document.getElementById('dBarbearia').textContent = `Conta PJ: ${fmt(s.barbeariaConta)} • Caixa: ${fmt(s.barbeariaCaixa)}`;
+
+  document.getElementById('kPessoal').textContent = fmt(gPess);
+  document.getElementById('dPessoal').textContent = `Saldo PF: ${fmt(s.andersonPessoal)} • Fatura: ${fmt(s.andersonCartao)}`;
+
+  document.getElementById('kReserva').textContent = fmt(res);
+  document.getElementById('barReserva').style.width = Math.min(100, res / meta * 100) + '%';
+  document.getElementById('dReserva').textContent = `${(res / meta * 100).toFixed(1)}% da meta (${fmt(meta)})`;
+
+  const transMes = db.transacoes.filter(t => String(t.data).startsWith(mes));
+  const gastoMercado = transMes.filter(t => {
+    const c = db.categorias.find(cat => cat.nome === t.cat);
+    return c?.mercado === true || /supermercado|mercado|casa/i.test(t.cat || '');
+  }).filter(t => t.tipo === 'despesa').reduce((a, t) => a + num(t.valor), 0) + (s.mercadoBaseMes === mes ? num(s.mercadoBase) : 0);
+
+  const teto = num(s.tetoMercado) || 1200;
+  const livre = teto - gastoMercado;
+  document.getElementById('kMercado').textContent = fmt(gastoMercado);
+  document.getElementById('barMercado').style.width = Math.min(100, Math.max(0, gastoMercado / teto * 100)) + '%';
+  document.getElementById('dMercado').textContent = `${fmt(livre)} livres de ${fmt(teto)}`;
+
+  const pagar = db.contas.filter(c => c.tipo === 'pagar' && c.status !== 'pago').reduce((a, c) => a + num(c.valor), 0);
+  const receber = db.contas.filter(c => c.tipo === 'receber' && c.status !== 'recebido').reduce((a, c) => a + num(c.valor), 0);
+
+  document.getElementById('kPagar').textContent = fmt(pagar);
+  document.getElementById('kReceber').textContent = fmt(receber);
+  document.getElementById('kProjetado').textContent = fmt(gBarber + gPess - pagar + receber);
+  document.getElementById('diagnostico').textContent = `Caixa operacional disponível: ${fmt(gBarber + gPess)}. Pendências a quitar no período: ${fmt(pagar)}.`;
+
+  const future = db.contas.filter(c => c.status === 'pendente').slice().sort((a, b) => (a.venc || '9999').localeCompare(b.venc || '9999')).slice(0, 8);
+  document.getElementById('proximas').innerHTML = `<table class="w-full"><thead><tr><th>Tipo</th><th>Descrição</th><th>Data</th><th>Valor</th></tr></thead><tbody>${future.map(c => `<tr><td><span class="pill ${c.tipo === 'pagar' ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'}">${c.tipo === 'pagar' ? 'A pagar' : 'A receber'}</span></td><td>${esc(c.nome)}</td><td>${esc(c.venc || '-')}</td><td class="font-bold">${fmt(c.valor)}</td></tr>`).join('') || '<tr><td colspan="4">Sem pendências abertas.</td></tr>'}</tbody></table>`;
+
+  document.getElementById('metaReserva').value = meta;
+  document.getElementById('fundoCarro').value = num(s.fundoCarro);
+  document.getElementById('metaCarro').value = num(s.metaCarro);
+  document.getElementById('resumoCarro').textContent = `Fundo ${fmt(s.fundoCarro)} acumulado de ${fmt(s.metaCarro)}.`;
+
+  renderChart();
+}
+
+function renderChart(){
+  const canvas = document.getElementById('chartCategorias');
+  if(!canvas || typeof Chart === 'undefined') return;
+  const sums = {};
+  db.transacoes.filter(t => t.tipo === 'despesa').forEach(t => sums[t.cat || 'Outros'] = (sums[t.cat || 'Outros'] || 0) + num(t.valor));
+  if(chart) chart.destroy();
+  chart = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(sums).length ? Object.keys(sums) : ['Sem despesas'],
+      datasets: [{
+        data: Object.keys(sums).length ? Object.values(sums) : [1],
+        backgroundColor: Object.keys(sums).length ? Object.keys(sums).map(l => db.categorias.find(c => c.nome === l)?.cor || '#71717a') : ['#27272a'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#e4e4e7', boxWidth: 10, font: { size: 10 } }
+        }
+      }
+    }
+  });
+}
+
+function renderCategorias(){
+  const sel = document.getElementById('tCat');
+  sel.innerHTML = db.categorias.map(c => `<option value="${esc(c.nome)}">${esc(c.nome)}</option>`).join('');
+}
+
+function renderAll(){
+  renderCategorias();
+  renderDashboard();
+  renderContas();
+  renderMovimentos();
+  setupSaldos();
+}
+
+function salvarMetaReserva(){
+  db.saldos.metaReserva = num(document.getElementById('metaReserva').value) || 10000;
+  saveDB();
+  status('Meta da reserva atualizada.');
+}
+
+function salvarMetaCarro(){
+  db.saldos.fundoCarro = num(document.getElementById('fundoCarro').value);
+  db.saldos.metaCarro = num(document.getElementById('metaCarro').value);
+  saveDB();
+  status('Fundo de barbearia/equipamentos atualizado.');
+}
+
+function exportarJSON(){
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sigma_prime_anderson_backup.json';
+  a.click();
+}
+
+function exportarCSV(){
+  const rows = [
+    ['id', 'data', 'descricao', 'tipo', 'categoria', 'conta', 'responsavel', 'valor', 'obs'],
+    ...db.transacoes.map(t => [t.id, t.data, t.desc, t.tipo, t.cat, t.conta, t.resp, t.valor, t.obs])
+  ];
+  const csv = rows.map(r => r.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'movimentacoes_anderson.csv';
+  a.click();
+}
+
+renderAll();
+</script>
+</body>
+</html>
